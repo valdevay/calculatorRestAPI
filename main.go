@@ -39,8 +39,6 @@ type CalculationRequest struct {
 	Expression string `json:"expression"`
 }
 
-var calculations = []Calculation{} //nessesary to initilization like a slice
-
 func calculateExpression(expression string) (string, error) {
 	expr, err := govaluate.NewEvaluableExpression(expression) // 7 + 7 for example
 	if err != nil {
@@ -51,10 +49,14 @@ func calculateExpression(expression string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%v", result), nil
-
 }
 
 func getCalculations(c echo.Context) error {
+	var calculations []Calculation
+
+	if err := db.Find(&calculations).Error; err != nil { // Find method helps to find all rows in db
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not get calculations"})
+	}
 	return c.JSON(http.StatusOK, calculations)
 }
 
@@ -75,7 +77,10 @@ func postCalculations(c echo.Context) error {
 		Result:     result,
 	}
 
-	calculations = append(calculations, calc)
+	if err := db.Create(&calc).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not get calculations"})
+	}
+
 	return c.JSON(http.StatusCreated, calc)
 }
 
@@ -93,29 +98,33 @@ func patchCalculations(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid expression"})
 	}
 
-	for i, calculation := range calculations { // looking for calculation to edit
-		if calculation.ID == id {
-			calculations[i].Expression = request.Expression
-			calculations[i].Result = result
-			return c.JSON(http.StatusOK, calculations[i])
-		}
+	var calc Calculation
+	if err := db.First(&calc, "id = ?", id).Error; err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Could not find expression"})
 	}
-	return c.JSON(http.StatusBadRequest, map[string]string{"error": "Calculation is not find"})
+
+	calc.Expression = request.Expression
+	calc.Result = result
+
+	if err := db.Save(&calc).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not update calculation"})
+	}
+
+	return c.JSON(http.StatusOK, calc)
 }
 
 func deleteCalculations(c echo.Context) error {
 	id := c.Param("id")
 
-	for i, calculation := range calculations { // looking for calculation to edit
-		if calculation.ID == id {
-			calculations = append(calculations[:i], calculations[i+1:]...)
-			return c.NoContent(http.StatusNoContent)
-		}
+	if err := db.Delete(&Calculation{}, "id = ?", id).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not delete calculation"})
 	}
-	return c.JSON(http.StatusBadRequest, map[string]string{"error": "Calculation is not find"})
+
+	return c.NoContent(http.StatusNoContent)
 }
 
 func main() {
+	initDB()
 	e := echo.New()
 
 	e.Use(middleware.CORS())
