@@ -1,55 +1,12 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"net/http"
 
-	"github.com/Knetic/govaluate"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
-
-var db *gorm.DB
-
-func initDB() {
-	dsn := "host=localhost user=postgres password=yourpassword dbname=postgres port=5432 sslmode=disable"
-	var err error
-
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("Could not connect to database: %v", err)
-	}
-
-	if err := db.AutoMigrate(&Calculation{}); err != nil {
-		log.Fatalf("Could not migrate: %v", err)
-	}
-}
-
-type Calculation struct {
-	ID         string `gorm:"primaryKey" json:"id"`
-	Expression string `json:"expression"`
-	Result     string `json:"result"`
-}
-
-type CalculationRequest struct {
-	Expression string `json:"expression"`
-}
-
-func calculateExpression(expression string) (string, error) {
-	expr, err := govaluate.NewEvaluableExpression(expression) // 7 + 7 for example
-	if err != nil {
-		return "", err // mistake like (5 + a)
-	}
-	result, err := expr.Evaluate(nil)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%v", result), nil
-}
 
 func getCalculations(c echo.Context) error {
 	var calculations []Calculation
@@ -75,10 +32,6 @@ func postCalculations(c echo.Context) error {
 		ID:         uuid.NewString(),
 		Expression: request.Expression,
 		Result:     result,
-	}
-
-	if err := db.Create(&calc).Error; err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not get calculations"})
 	}
 
 	return c.JSON(http.StatusCreated, calc)
